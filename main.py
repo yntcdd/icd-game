@@ -116,12 +116,79 @@ def collides(x, y):
 
     return False
 
-generate_room(12, 12)
+class Door:
+
+    def __init__(self, x, y, direction):
+        self.x = x
+        self.y = y
+        self.direction = direction
+
+        self.frame = 0
+        self.target_frame = 0
+
+        self.sprite = turtle.Turtle()
+        self.sprite.penup()
+        self.sprite.shape(
+            f"images/tiles/animated/BigDoor_{direction}_0.png"
+        )
+
+        self.sprite.goto(x, y)
+
+    def update(self):
+
+        if self.frame < self.target_frame:
+            self.frame += 1
+
+        elif self.frame > self.target_frame:
+            self.frame -= 1
+
+        self.sprite.shape(
+            f"images/tiles/animated/BigDoor_{self.direction}_{self.frame}.png"
+        )
+
+    def open(self):
+        self.target_frame = 5
+
+    def close(self):
+        self.target_frame = 0
+
+    def toggle(self):
+        if self.target_frame == 0:
+            self.open()
+        else:
+            self.close()
+
+    def set_highlight(self, highlighted):
+        if highlighted:
+            self.sprite.shapesize(1.15)
+        else:
+            self.sprite.shapesize(1.0)
+
+ROOM_WIDTH = 12
+ROOM_HEIGHT = 12
+
+generate_room(ROOM_WIDTH, ROOM_HEIGHT)
+
+edge_x = ROOM_WIDTH * TILE_SIZE / 2 - TILE_SIZE / 2
+edge_y = ROOM_HEIGHT * TILE_SIZE / 2 - TILE_SIZE / 2
+
+doors = [
+    Door(0, edge_y, "U"),
+    Door(0, -edge_y, "D"),
+    Door(-edge_x, 0, "S"),
+    Door(edge_x, 0, "A")
+]
 
 player = turtle.Turtle()
 player.penup()
 player.shape("images/players/1/D_Idle_0.png")
 player.goto(0, 0)
+
+for direction in ["D", "U", "S", "A"]:
+    for i in range(6):
+        screen.addshape(
+            f"images/tiles/animated/BigDoor_{direction}_{i}.png"
+        )
 
 speed = 5
 
@@ -129,14 +196,17 @@ keys = {
     "w": False,
     "a": False,
     "s": False,
-    "d": False
+    "d": False,
+    "e": False
 }
 
 screen.onkeypress(lambda: keys.__setitem__("w", True), "w")
 screen.onkeypress(lambda: keys.__setitem__("a", True), "a")
 screen.onkeypress(lambda: keys.__setitem__("s", True), "s")
 screen.onkeypress(lambda: keys.__setitem__("d", True), "d")
+screen.onkeypress(lambda: keys.__setitem__("e", True), "e")
 
+screen.onkeyrelease(lambda: keys.__setitem__("e", False), "e")
 screen.onkeyrelease(lambda: keys.__setitem__("w", False), "w")
 screen.onkeyrelease(lambda: keys.__setitem__("a", False), "a")
 screen.onkeyrelease(lambda: keys.__setitem__("s", False), "s")
@@ -197,5 +267,28 @@ while True:
     else:
         player.shape(f"images/players/1/D_Idle_{frame}.png")
 
+    nearest = None
+    nearest_distance = 999999
+
+    for door in doors:
+
+        distance = (
+            (player.xcor() - door.x) ** 2 +
+            (player.ycor() - door.y) ** 2
+        ) ** 0.5
+
+        highlighted = distance < 80
+
+        door.set_highlight(highlighted)
+
+        if distance < nearest_distance:
+            nearest_distance = distance
+            nearest = door
+
+        door.update()
+
+    if keys["e"] and nearest_distance < 80:
+        nearest.toggle()
+        keys["e"] = False
     screen.update()
     time.sleep(1 / 60)

@@ -1,58 +1,29 @@
 from PIL import Image
-import os
 
+INPUT_DIR = "images/gui/interface"
+FILES = ["Tile_04.png", "Tile_05.png", "Tile_06.png"]
 
-os.makedirs("images/tiles/animated", exist_ok=True)
+SCALE = 4
 
-def split_sheet(sheet_path, output_prefix, frame_width, frame_height):
-    sheet = Image.open(sheet_path)
+def load_and_scale(path):
+    img = Image.open(path).convert("RGBA")
+    new_size = (img.width * SCALE, img.height * SCALE)
+    return img.resize(new_size, Image.NEAREST)
 
-    for frame in range(6):
-        cropped = sheet.crop((
-            frame * frame_width,
-            0,
-            (frame + 1) * frame_width,
-            frame_height
-        ))
+def main():
+    images = [load_and_scale(f"{INPUT_DIR}/{f}") for f in FILES]
 
-        cropped.save(
-            f"images/tiles/animated/{output_prefix}_{frame}.png"
-        )
+    total_width = sum(img.width for img in images)
+    max_height = max(img.height for img in images)
 
-# BigDoor_D (36x36)
-split_sheet(
-    "images/tiles/animated/BigDoor_D.png",
-    "BigDoor_D",
-    36,
-    36
-)
+    result = Image.new("RGBA", (total_width, max_height))
 
-# BigDoor_U (36x36)
-split_sheet(
-    "images/tiles/animated/BigDoor_U.png",
-    "BigDoor_U",
-    36,
-    36
-)
+    x_offset = 0
+    for img in images:
+        result.paste(img, (x_offset, 0))
+        x_offset += img.width
 
-# BigDoor_S (30x42)
-split_sheet(
-    "images/tiles/animated/BigDoor_S.png",
-    "BigDoor_S",
-    30,
-    42
-)
+    result.save(f"{INPUT_DIR}/combined_04_05_06.png")
 
-# Create mirrored version for right-side doors
-for frame in range(6):
-    img = Image.open(
-        f"images/tiles/animated/BigDoor_S_{frame}.png"
-    )
-
-    flipped = img.transpose(Image.FLIP_LEFT_RIGHT)
-
-    flipped.save(
-        f"images/tiles/animated/BigDoor_A_{frame}.png"
-    )
-
-print("Done!")
+if __name__ == "__main__":
+    main()

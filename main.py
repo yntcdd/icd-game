@@ -206,7 +206,7 @@ def create_tile_sprite(x, y, tile_num):
     t.goto(x, y)
     tile_sprites.append(t)
 
-def generate_room(width, height, doors_config):
+def generate_room(width, height, doors_config, room_idx=0):
     for t in tile_sprites:
         t.hideturtle()
     tile_sprites.clear()
@@ -223,11 +223,27 @@ def generate_room(width, height, doors_config):
         wall_cells.add((0, row))
         wall_cells.add((width - 1, row))
 
+    # Clear pathways out for standard structural doors
     for d in doors_config:
         gy = round((start_y - d["y"]) / TILE_SIZE)
         if d["dir"] in ["U", "D"]:
             wall_cells.discard((5, gy))
             wall_cells.discard((6, gy))
+
+    # --- MAZE STRUCTURE DESIGN (ROOM 3) ---
+    if room_idx == 3:
+        # Custom maze layout segmenting coordinates
+        maze_walls = [
+            (2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (2, 8),
+            (3, 6), (4, 2), (4, 3), (4, 4), (4, 6), (4, 8),
+            (5, 4), (6, 4), (6, 7), (6, 8),
+            (7, 2), (7, 3), (7, 4), (7, 6), (8, 6), (9, 2),
+            (9, 3), (9, 4), (9, 5), (9, 6), (9, 7), (9, 8)
+        ]
+        for cell in maze_walls:
+            # Constrain to ensure maze elements stay completely above the player's entrance zone
+            if cell[1] < 10:
+                wall_cells.add(cell)
 
     for row in range(height):
         for col in range(width):
@@ -251,8 +267,8 @@ def collides(x, y):
 
     for d in doors:
         if d.frame < 5:
-            dx1, dx2 = d.x - 64, d.x + 48
-            dy1, dy2 = d.y - 48, d.y + 48
+            dx1, dx2 = d.x - 32, d.x + 32
+            dy1, dy2 = d.y - 32, d.y + 32
             if right > dx1 and left < dx2 and top > dy1 and bottom < dy2:
                 return True
 
@@ -416,7 +432,7 @@ def update_items_physics():
                 t_obj.goto(data["dest_x"], data["dest_y"])
                 inventory_sprites[idx] = t_obj
                 flying_items.pop(i)
-                show_message("Found a key! Check if it fits the top lock.", duration=120)
+                show_message("Found a key! Check if it fits the lock.", duration=120)
 
 ROOM_WIDTH = 12
 ROOM_HEIGHT = 12
@@ -429,14 +445,15 @@ rooms = {}
 
 def build_room_layout(i):
     doors_data = []
-    if i < MAX_ROOMS - 1:
+    # Every room has an upper door, including Room 3 which serves as the final exit door
+    if i < MAX_ROOMS:
         needs_key = (i == 1 or i == 2)
         doors_data.append({"x": 0, "y": edge_y, "dir": "U", "needs_key": needs_key, "door_id": 100 + i})
     if i > 0:
         doors_data.append({"x": 0, "y": -edge_y, "dir": "D", "needs_key": False, "door_id": 200 + i})
     return doors_data
 
-# Randomly decide which of the 12 chests holds the actual key (0 to 11 index)
+# Hide key inside one of the 12 chests in Room 2 (0 to 11 index)
 room2_lucky_chest_idx = random.randint(0, 11)
 
 for i in range(MAX_ROOMS):
@@ -444,10 +461,8 @@ for i in range(MAX_ROOMS):
     if i == 1:
         chests_cfg = [{"x": 0, "y": 0, "dir": "D", "key": True}]
     elif i == 2:
-        # Generate exactly 6 chests on the Left side, and 6 chests on the Right side
-        # Evenly spaces them out vertically from y = 160 down to y = -160
+        # ROOM 2: 12 Chests (6 on each side)
         y_positions = [160, 96, 32, -32, -96, -160]
-
         chest_counter = 0
 
         # Left side chests (X = -180)
@@ -481,7 +496,7 @@ def load_room(i, spawn_x=0, spawn_y=None):
     current_prompt_type = None
 
     if spawn_y is None:
-        spawn_y = -edge_y + 180 if i == 0 else -edge_y + 100
+        spawn_y = -edge_y + 90
 
     for sprite in door_sprites:
         sprite.hideturtle()
@@ -499,7 +514,7 @@ def load_room(i, spawn_x=0, spawn_y=None):
     if player is not None:
         player.hideturtle()
 
-    generate_room(ROOM_WIDTH, ROOM_HEIGHT, rooms[i]["doors_config"])
+    generate_room(ROOM_WIDTH, ROOM_HEIGHT, rooms[i]["doors_config"], room_idx=i)
 
     rooms[i]["doors_instances"] = [
         Door(d["x"], d["y"], d["dir"], d["needs_key"], d["door_id"]) for d in rooms[i]["doors_config"]
@@ -521,12 +536,14 @@ def load_room(i, spawn_x=0, spawn_y=None):
 
     if i == 0:
         show_message("Welcome! Head through the door to find the chest room.", duration=180)
+    elif i == 1:
+        show_message("Open the central chest to obtain the maze key card!", duration=180)
     elif i == 2:
-        show_message("Find the key hidden in these chests to open the door!", duration=200)
+        show_message("Find the real key hidden within the 12 side chests!", duration=200)
     elif i == 3:
-        show_message("You reached the final room! Subject extraction successful.", duration=240)
+        show_message("Maze Room reached! Traverse up to the escape door.", duration=240)
 
-# --- STATE CONTROLLER FOR START SCREEN ---
+# --- STATE CONTROLLER FOR START & END SCREEN ---
 game_state = "START_SCREEN"
 ui_painter = turtle.Turtle()
 ui_painter.hideturtle()
@@ -539,9 +556,31 @@ def draw_cool_start_scene():
             create_tile_sprite(x_idx * TILE_SIZE, y_idx * TILE_SIZE, random.choice(FLOOR_TILES))
 
     ui_painter.goto(0, 180)
-    ui_painter.write("THE LAST SUBJECT", align="center", font=("TinyFontCraftpixPixel", 36, "bold"))
+    ui_painter.write("THE LOST DUNGEON", align="center", font=("TinyFontCraftpixPixel", 36, "bold"))
     ui_painter.goto(0, -180)
     ui_painter.write("PRESS ENTER TO START", align="center", font=("TinyFontCraftpixPixel", 16, "normal"))
+
+def draw_victory_screen():
+    global game_state
+    game_state = "VICTORY"
+    
+    player.hideturtle()
+    if inv_ui is not None: inv_ui.hideturtle()
+    if selector is not None: selector.clear()
+    for d in door_sprites: d.hideturtle()
+    for c in chest_sprites: c.hideturtle()
+    text_painter.clear()
+    
+    screen.bgcolor("#11111d")
+    ui_painter.clear()
+    ui_painter.color("#4af626")
+    ui_painter.goto(0, 40)
+    ui_painter.write("DUNGEON ESCAPED!", align="center", font=("TinyFontCraftpixPixel", 32, "bold"))
+    ui_painter.color("white")
+    ui_painter.goto(0, -30)
+    ui_painter.write("You have completely escaped The Lost Dungeon!", align="center", font=("TinyFontCraftpixPixel", 16, "normal"))
+    ui_painter.goto(0, -70)
+    ui_painter.write("Thank you for playing!", align="center", font=("TinyFontCraftpixPixel", 14, "italic"))
 
 def start_game():
     global game_state, player, frame, timer
@@ -552,7 +591,7 @@ def start_game():
         tile_sprites.clear()
 
         game_state = "PLAYING"
-        load_room(0, spawn_x=0, spawn_y=-edge_y + 180)
+        load_room(0, spawn_x=0, spawn_y=-edge_y + 90)
 
 draw_cool_start_scene()
 
@@ -680,31 +719,35 @@ while True:
             transition_timer += 1
             if transition_timer >= 24 and active_transition.frame >= 5:
                 d = active_transition
-                if d.direction == "U" and current_room < MAX_ROOMS - 1:
+                # If going through the top door of Room 3, trigger game victory completion
+                if d.direction == "U" and current_room == 3:
+                    draw_victory_screen()
+                elif d.direction == "U" and current_room < MAX_ROOMS - 1:
                     current_room += 1
-                    load_room(current_room, spawn_x=0, spawn_y=-edge_y + 100)
+                    load_room(current_room, spawn_x=0, spawn_y=-edge_y + 90)
                 elif d.direction == "D" and current_room > 0:
                     current_room -= 1
-                    load_room(current_room, spawn_x=0, spawn_y=edge_y - 100)
+                    load_room(current_room, spawn_x=0, spawn_y=edge_y - 90)
                 active_transition = None
 
-        for c in chests:
-            c.update()
+        if game_state == "PLAYING":
+            for c in chests:
+                c.update()
 
-        update_items_physics()
+            update_items_physics()
 
-        for d in doors:
-            d.update()
+            for d in doors:
+                d.update()
 
-        player.shape(
-            f"images/players/1/{direction}_Walk_{frame}.png"
-            if moving and active_transition is None else
-            f"images/players/1/{direction}_Idle_{frame}.png"
-        )
+            player.shape(
+                f"images/players/1/{direction}_Walk_{frame}.png"
+                if moving and active_transition is None else
+                f"images/players/1/{direction}_Idle_{frame}.png"
+            )
 
-        if dialogue_timer > 0 and current_prompt_type is None:
-            dialogue_timer -= 1
-        draw_dialogue_box()
+            if dialogue_timer > 0 and current_prompt_type is None:
+                dialogue_timer -= 1
+            draw_dialogue_box()
 
     screen.update()
     time.sleep(1 / 60)

@@ -2,6 +2,23 @@ import turtle
 import time
 import random
 import math
+import os
+# --- CHANGED: Imported pygame mixer for sound handling ---
+from pygame import mixer
+
+# --- CHANGED: Initialize the mixer and pre-load all game audio ---
+mixer.init()
+
+# Background Music (Set to loop indefinitely using -1)
+mixer.music.load(os.path.join("music", "music.mp3"))
+mixer.music.set_volume(0.5)
+mixer.music.play(-1) 
+
+# Sound Effects
+door_sound = mixer.Sound(os.path.join("music", "door.mp3"))
+chest_sound = mixer.Sound(os.path.join("music", "chest.mp3"))
+victory_sound = mixer.Sound(os.path.join("music", "victory.mp3"))
+walk_sound = mixer.Sound(os.path.join("music", "walk.mp3"))
 
 screen = turtle.Screen()
 screen.setup(800, 800)
@@ -316,6 +333,8 @@ class Door:
         self.sprite.shape(f"images/tiles/animated/BigDoor_{self.direction}_{self.frame}.png")
 
     def open_door(self):
+        # --- CHANGED: Play door opening sound effect once ---
+        door_sound.play()
         self.target = 5
         self.is_opening = True
         self.is_unlocked = True
@@ -363,6 +382,8 @@ class Chest:
 
     def open(self):
         if self.state == "CLOSED":
+            # --- CHANGED: Play chest opening sound effect once ---
+            chest_sound.play()
             self.state = "OPENING"
 
     def spawn_item(self):
@@ -439,13 +460,12 @@ ROOM_HEIGHT = 12
 edge_x = ROOM_WIDTH * TILE_SIZE / 2 - TILE_SIZE / 2
 edge_y = ROOM_HEIGHT * TILE_SIZE / 2 - TILE_SIZE / 2
 
-MAX_ROOMS = 4
+MAX_ROOMS = 5
 current_room = 0
 rooms = {}
 
 def build_room_layout(i):
     doors_data = []
-    # Every room has an upper door, including Room 3 which serves as the final exit door
     if i < MAX_ROOMS:
         needs_key = (i == 1 or i == 2)
         doors_data.append({"x": 0, "y": edge_y, "dir": "U", "needs_key": needs_key, "door_id": 100 + i})
@@ -542,6 +562,8 @@ def load_room(i, spawn_x=0, spawn_y=None):
         show_message("Find the real key hidden within the 12 side chests!", duration=200)
     elif i == 3:
         show_message("Maze Room reached! Traverse up to the escape door.", duration=240)
+    elif i == 4:
+        show_message("Final Room reached! Head through the top door to win!", duration=180)
 
 # --- STATE CONTROLLER FOR START & END SCREEN ---
 game_state = "START_SCREEN"
@@ -564,6 +586,11 @@ def draw_victory_screen():
     global game_state
     game_state = "VICTORY"
     
+    # --- CHANGED: Halt background music and walking loop, then play victory song once ---
+    mixer.music.stop()
+    walk_sound.stop()
+    victory_sound.play()
+
     player.hideturtle()
     if inv_ui is not None: inv_ui.hideturtle()
     if selector is not None: selector.clear()
@@ -666,6 +693,14 @@ while True:
             if not collides(x, ny): y = ny
             player.goto(x, y)
 
+            # --- CHANGED: Loop the walk sound while moving, stop it when idle ---
+            if moving:
+                # -1 loops indefinitely, but we protect it so it doesn't repeatedly restart every frame
+                if not mixer.get_busy() or mixer.Sound.get_num_channels(walk_sound) == 0:
+                    walk_sound.play(-1)
+            else:
+                walk_sound.stop()
+
             timer += 1
             if timer >= 12:
                 frame = (frame + 1) % 4
@@ -716,11 +751,13 @@ while True:
                 current_prompt_type = None
 
         else:
+            # --- CHANGED: Halt walk sound loop during active screen room transitions ---
+            walk_sound.stop()
+            
             transition_timer += 1
             if transition_timer >= 24 and active_transition.frame >= 5:
                 d = active_transition
-                # If going through the top door of Room 3, trigger game victory completion
-                if d.direction == "U" and current_room == 3:
+                if d.direction == "U" and current_room == 4:
                     draw_victory_screen()
                 elif d.direction == "U" and current_room < MAX_ROOMS - 1:
                     current_room += 1
